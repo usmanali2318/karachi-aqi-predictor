@@ -1,0 +1,13 @@
+[project]
+name = "workspace"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "hopsworks[python]>=5.0.3",
+    "joblib>=1.5.3",
+    "pandas>=2.3.3",
+    "requests>=2.34.2",
+    "scikit-learn>=1.9.0",
+]
