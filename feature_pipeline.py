@@ -17,8 +17,11 @@ def us_aqi(pm25, pm10):
     return round(max(sub_index(pm25, PM25_BP), sub_index(pm10, PM10_BP)))
 
 def fetch_features() -> pd.DataFrame:
-    air = requests.get("https://api.openweathermap.org/data/2.5/air_pollution",
-                        params={"lat": LAT, "lon": LON, "appid": OWM_KEY}).json()["list"][0]
+    air_resp = requests.get("https://api.openweathermap.org/data/2.5/air_pollution",
+                             params={"lat": LAT, "lon": LON, "appid": OWM_KEY})
+    if "list" not in air_resp.json():
+        raise RuntimeError(f"OpenWeather API error (check OPENWEATHER_API_KEY): {air_resp.status_code} {air_resp.text}")
+    air = air_resp.json()["list"][0]
     wx = requests.get("https://api.openweathermap.org/data/2.5/weather",
                        params={"lat": LAT, "lon": LON, "appid": OWM_KEY, "units": "metric"}).json()
 
