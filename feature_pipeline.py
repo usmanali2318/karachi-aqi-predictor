@@ -5,6 +5,13 @@ import hopsworks
 LAT, LON = 24.8608, 67.0104
 OWM_KEY = os.environ["OPENWEATHER_API_KEY"]
 
+POINTS = {
+    "site": (24.8944, 66.9874),
+    "clifton": (24.8170, 67.0330),
+    "landhi": (24.8504, 67.1999),
+    "malir": (24.8929, 67.1953),
+}
+
 PM25_BP = [(0,12,0,50),(12.1,35.4,51,100),(35.5,55.4,101,150),(55.5,150.4,151,200),(150.5,250.4,201,300),(250.5,350.4,301,400),(350.5,500.4,401,500)]
 PM10_BP = [(0,54,0,50),(55,154,51,100),(155,254,101,150),(255,354,151,200),(355,424,201,300),(425,504,301,400),(505,604,401,500)]
 
@@ -15,6 +22,15 @@ def us_aqi(pm25, pm10):
                 return (ihi - ilo) / (hi - lo) * (c - lo) + ilo
         return bp[-1][3]
     return round(max(sub_index(pm25, PM25_BP), sub_index(pm10, PM10_BP)))
+
+def fetch_spatial_now():
+    vals = []
+    for lat, lon in POINTS.values():
+        c = requests.get("https://api.openweathermap.org/data/2.5/air_pollution",
+                          params={"lat": lat, "lon": lon, "appid": OWM_KEY}).json()["list"][0]["components"]
+        vals.append(us_aqi(c["pm2_5"], c["pm10"]))
+    return {"city_aqi_mean": sum(vals)/len(vals), "city_aqi_max": max(vals), "city_aqi_min": min(vals),
+            "city_aqi_spread": max(vals) - min(vals)}
 
 def fetch_features() -> pd.DataFrame:
     air_resp = requests.get("https://api.openweathermap.org/data/2.5/air_pollution",
@@ -29,18 +45,20 @@ def fetch_features() -> pd.DataFrame:
     row = {
         "timestamp": int(ts.timestamp()),
         "aqi": us_aqi(air["components"]["pm2_5"], air["components"]["pm10"]),
-        **{k: v for k, v in air["components"].items()},  # pm2_5, pm10, no2, so2, o3, co, etc.
+        **{k: v for k, v in air["components"].items()},
         "temp": wx["main"]["temp"],
         "humidity": wx["main"]["humidity"],
         "pressure": wx["main"]["pressure"],
         "wind_speed": wx["wind"]["speed"],
+        **fetch_spatial_now(),
         "hour": ts.hour,
         "day": ts.day,
         "month": ts.month,
         "day_of_week": ts.weekday(),
     }
     df = pd.DataFrame([row])
-    float_cols = ["aqi", "co", "no", "no2", "o3", "so2", "pm2_5", "pm10", "nh3", "temp", "humidity", "pressure", "wind_speed"]
+    float_cols = ["aqi", "co", "no", "no2", "o3", "so2", "pm2_5", "pm10", "nh3", "temp", "humidity", "pressure",
+                  "wind_speed", "city_aqi_mean", "city_aqi_max", "city_aqi_min", "city_aqi_spread"]
     df[float_cols] = df[float_cols].astype("float64")
     df[["timestamp", "hour", "day", "month", "day_of_week"]] = df[["timestamp", "hour", "day", "month", "day_of_week"]].astype("int64")
     return df
@@ -56,7 +74,7 @@ def push_to_hopsworks(df: pd.DataFrame):
         version=1,
         primary_key=["timestamp"],
         event_time="timestamp",
-        description="Hourly Karachi AQI + weather features",
+        description="Hourly Karachi AQI + weather + city-wide spatial spread features",
     )
     fg.insert(df)
 
